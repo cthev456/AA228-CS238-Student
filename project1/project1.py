@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import networkx as nx
+import random
 from scipy.special import loggamma
 
 class K2Search():
@@ -101,9 +102,13 @@ def compute(infile, outfile):
     # WRITE YOUR CODE HERE
     # FEEL FREE TO CHANGE ANYTHING ANYWHERE IN THE CODE
     # THIS INCLUDES CHANGING THE FUNCTION NAMES, MAKING THE CODE MODULAR, BASICALLY ANYTHING
-
-    pass
-
+    ordering = np.genfromtxt(infile, delimiter=',', dtype=None, encoding=None, max_rows=1)
+    data = np.genfromtxt(infile, delimiter=',', dtype=None, encoding=None)
+    ordering = ordering.tolist()
+    variables = random.shuffle(ordering)
+    test_algo = K2Search(ordering)
+    final_graph = test_algo.fit(variables, data)
+    write_gph(final_graph, variables, outfile)
 
 def main():
     if len(sys.argv) != 3:
