@@ -2,8 +2,14 @@ import sys
 import numpy as np
 import networkx as nx
 import random
+import pandas as pd
 from scipy.special import loggamma
 
+class Variable():
+    def __init__(self, variable, column):
+        self.variable = variable
+        self.r = len(np.unique(column))
+    
 class K2Search():
     """
     K2 search of the space of directed acyclic graphs using a specified variable ordering.
@@ -15,7 +21,7 @@ class K2Search():
     def __init__(self, ordering: list[int]):
         self.ordering = ordering
 
-    def fit(self, variables: list[Variable], data: np.ndarray) -> nx.DiGraph:
+    def fit(self, variables, data):
         graph = nx.DiGraph()
         graph.add_nodes_from(range(len(variables)))
         for k, i in enumerate(self.ordering[1:]):
@@ -38,23 +44,26 @@ class K2Search():
     
 def sub2ind(siz, x):
     k = [1] + list(np.cumprod(siz[:-1]))
-    return np.dot(k, x - 1) + 1
+    x = [element - 1 for element in x]
+    return np.dot(k, x)
 
 def statistics(vars, G, D):
-    n = D.shape[0]
+    n = len(vars)
     r = [vars[i].r for i in range(n)]
-    q = [np.prod([r[j] for j in [v for v in G.neighbors(i)]]) for i in range(n)]
+    q = np.array([int(np.prod([r[j] for j in G.predecessors(i)])) for i in range(n)])
     M = [np.zeros((q[i], r[i])) for i in range(n)]
-    
-    for o in D.T:  # Transpose D for easier column-wise iteration
+    for o in D:  
         for i in range(n):
-            k = o[i]
-            parents = [v for v in G.neighbors(i)]
+            k = o[i] - 1
+            parents = [v for v in G.predecessors(i)]
             j = 1
             if parents:
-                j = sub2ind([r[parent] for parent in parents], list(o[parents]))
-            M[i][j - 1, k] += 1.0
-    
+                j = sub2ind([r[parent] for parent in parents], list(o[parents]-1))
+            try:
+                M[i][j - 1, k - 1] += 1.0
+            except Exception as e:
+                print(M, i, j, k, e)
+                sys.exit(1)
     return M
 
 def prior(variables, graph):
@@ -95,19 +104,32 @@ def bayesian_score(variables, graph, data):
 def write_gph(dag, idx2names, filename):
     with open(filename, 'w') as f:
         for edge in dag.edges():
-            f.write("{}, {}\n".format(idx2names[edge[0]], idx2names[edge[1]]))
+            f.write("{}, {}\n".format(idx2names[edge[0]].variable, idx2names[edge[1]].variable))
 
+# Define a function to read the CSV file and create Variable objects
+def read_csv_and_create_variables(file_path):
+    data = pd.read_csv(file_path)
+    columns = data.columns
+    variable_list = []
+
+    for col_name in columns:
+        variable = Variable(col_name, data[col_name])
+        variable_list.append(variable)
+    return variable_list
 
 def compute(infile, outfile):
     # WRITE YOUR CODE HERE
     # FEEL FREE TO CHANGE ANYTHING ANYWHERE IN THE CODE
     # THIS INCLUDES CHANGING THE FUNCTION NAMES, MAKING THE CODE MODULAR, BASICALLY ANYTHING
-    ordering = np.genfromtxt(infile, delimiter=',', dtype=None, encoding=None, max_rows=1)
-    data = np.genfromtxt(infile, delimiter=',', dtype=None, encoding=None)
-    ordering = ordering.tolist()
-    variables = random.shuffle(ordering)
+    variables = read_csv_and_create_variables(infile)
+    data = np.genfromtxt(infile, delimiter=',', dtype=None, encoding=None, skip_header=1)
+    ordering = [i for i in range(len(variables))]
+    random.shuffle(ordering)
     test_algo = K2Search(ordering)
     final_graph = test_algo.fit(variables, data)
+    print(final_graph)
+    final_score = bayesian_score(variables, final_graph, data)
+    print(final_score)
     write_gph(final_graph, variables, outfile)
 
 def main():
